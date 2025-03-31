@@ -97,8 +97,13 @@ projectPoints(Eigen::Matrix<double, 3, 3> K,
   };
   Eigen::Matrix4d field2camera = field2camera_wpi * camera2opencv;
 
+  std::cout << "field2camera" << std::endl << field2camera << std::endl;
+  std::cout << "field2corners" << std::endl << field2corners << std::endl;
+
   // transform the points to camera space
   auto camera2corners = field2camera.inverse() * field2corners; 
+
+  std::cout << "camera2corners" << std::endl << camera2corners << std::endl;
 
   // project the points. This is verbose but whatever
   auto pointsUnnormalized =
@@ -122,8 +127,14 @@ TEST(PoseTest, Projection) {
 
   params.worldPoints = getTestTags();
 
-  frc::Transform3d robot2camera {};
-  params.imagePoints = projectPoints(params.K, robot2camera.ToMatrix(), params.worldPoints);
+  frc::Pose3d field2robot {
+    frc::Translation3d{-0.5_m, 0.5_m, 0_m}, frc::Rotation3d{}
+  };
+  frc::Transform3d robot2camera {
+    frc::Translation3d{-0.0_m, 0.0_m, 0_m}, frc::Rotation3d{}
+  };
+  auto field2camera_wpi = field2robot + robot2camera;
+  params.imagePoints = projectPoints(params.K, field2camera_wpi.ToMatrix(), params.worldPoints);
 
   std::cout << "world points:\n" << params.worldPoints << std::endl;
   std::cout << "image points:\n" << params.imagePoints << std::endl;
@@ -137,8 +148,18 @@ TEST(PoseTest, Naive) {
 
   params.worldPoints = getTestTags();
 
-  frc::Transform3d robot2camera {frc::Pose3d{}, frc::Pose3d{frc::Translation3d{-1.3_m, 0.25_m, 0_m}, frc::Rotation3d{0_rad, 0_rad, -1.5_rad}}};
-  params.imagePoints = projectPoints(params.K, robot2camera.ToMatrix(), params.worldPoints);
+  frc::Pose3d field2robot {
+    frc::Translation3d{0_m, 0_m, 0_m}, frc::Rotation3d{}
+  };
+  frc::Transform3d robot2camera {
+    frc::Translation3d{-1.3_m, 0.25_m, 0_m}, frc::Rotation3d{0_rad, 0_rad, -1.5_rad}
+  };
+  auto field2camera_wpi = field2robot + robot2camera;
+  params.imagePoints = projectPoints(params.K, field2camera_wpi.ToMatrix(), params.worldPoints);
+
+  fmt::println("Image points:\n{}", params.imagePoints);
+  fmt::println("World points:\n{}", params.worldPoints);
+  fmt::println("==============");
 
   auto t0 = std::chrono::high_resolution_clock::now();
   auto polynomial_ret = cpnp::solve_polynomial(params);
@@ -149,4 +170,6 @@ TEST(PoseTest, Naive) {
   auto naive_ret = cpnp::solve_naive(params);
   fmt::println("Polynomial method says robot is at:\n{}", polynomial_ret.ToMatrix());
   fmt::println("Naive method says robot is at:\n{}", naive_ret.ToMatrix());
+
+  EXPECT_NEAR(field2robot.X().to<double>(), naive_ret.X().to<double>(), 0.01);
 }
